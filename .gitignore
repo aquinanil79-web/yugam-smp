@@ -1,6 +1,9 @@
-node_modules
-.next
+node_modules/
+.next/
 .env
-storage/uploads
+*.sqlite
+*.sqlite-*
+storage/uploads/
+uploads/
 prisma/*.db
 prisma/*.db-journal
