@@ -148,6 +148,7 @@ app.get('/api/passports/:id', async (req, res) => {
   const qrCode = await QRCode.toDataURL(row.verification_url)
   res.json({ passportId: row.passport_id, playerName: row.player_name, minecraftUsername: row.minecraft_username, minecraftUuid: row.minecraft_uuid, discordUsername: row.discord_username, server: 'YUGAM SMP', mode: row.server_mode, issueDate: row.approval_at, status: 'VERIFIED', photoUrl: row.photo_path ? `/uploads/${path.basename(row.photo_path)}` : null, verificationUrl: row.verification_url, qrCode })
 })
+app.use((error, req, res, next) => { if (error instanceof multer.MulterError || error?.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: 'Portrait must be a JPG, PNG, or WebP image smaller than 4MB.' }); if (error) return res.status(500).json({ error: 'The application service is temporarily unavailable.' }); next() })
 app.use((_, res) => res.sendFile(path.join(root, 'public', 'index.html')))
 if (!isVercel) app.listen(port, () => console.log(`YUGAM SMP registry running at ${appOrigin}`))
 
