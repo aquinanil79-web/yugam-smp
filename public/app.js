@@ -1,6 +1,7 @@
 const app = document.querySelector('#app')
 const routes = location.pathname.split('/').filter(Boolean)
 const state = { form: {}, photo: null }
+setTimeout(() => { document.querySelectorAll('#applicationForm [name="email"], #statusForm [name="email"]').forEach(input => input.closest('label')?.remove()); document.querySelectorAll('p').forEach(node => { node.textContent = node.textContent.replace('Updates will be sent to your submitted email address.', 'Keep your application ID to check its status.') }) }, 0)
 const esc = value => String(value ?? '').replace(/[&<>\"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[char]))
 const date = value => value ? new Date(value).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase() : '—'
 function shell(content, active = '') { app.innerHTML = `<div class="site"><header class="nav"><a class="brand" href="/"><span class="brand-icon">Y</span><span><b>YUGAM</b><small>SMP NETWORK</small></span></a><nav><a class="${active === 'apply' ? 'active' : ''}" href="/apply">APPLY</a><a class="${active === 'status' ? 'active' : ''}" href="/application/status">STATUS</a><a href="/admin/login">ADMIN <span>↗</span></a></nav></header>${content}<footer><span>FICTIONAL SERVER DOCUMENT <b>•</b> YUGAM SMP</span><span>REGISTRY ONLINE <i></i></span></footer></div>` }
