@@ -15,12 +15,14 @@ import nodemailer from 'nodemailer'
 import { z } from 'zod'
 
 const root = process.cwd()
+const isVercel = Boolean(process.env.VERCEL)
 const port = Number(process.env.PORT || 3000)
 const appOrigin = process.env.APP_ORIGIN || `http://localhost:${port}`
 const app = express()
-const uploadsDir = path.join(root, 'uploads')
+const runtimeDir = isVercel ? '/tmp' : root
+const uploadsDir = path.join(runtimeDir, 'uploads')
 fs.mkdirSync(uploadsDir, { recursive: true })
-const db = new Database(path.join(root, 'yugam.sqlite'))
+const db = new Database(path.join(runtimeDir, 'yugam.sqlite'))
 db.pragma('journal_mode = WAL')
 db.exec(`
   CREATE TABLE IF NOT EXISTS applications (
@@ -56,7 +58,7 @@ app.use(express.json({ limit: '1mb' }))
 app.use(express.urlencoded({ extended: false }))
 app.use('/uploads', express.static(uploadsDir, { maxAge: '1h' }))
 app.use(express.static(path.join(root, 'public')))
-app.use(session({ secret: process.env.SESSION_SECRET || 'development-only-change-me', resave: false, saveUninitialized: false, cookie: { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', maxAge: 1000 * 60 * 60 * 8 }, store: new (SQLiteStoreFactory(session))({ db: 'sessions.sqlite', dir: root }) }))
+app.use(session({ secret: process.env.SESSION_SECRET || 'development-only-change-me', resave: false, saveUninitialized: false, cookie: { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', maxAge: 1000 * 60 * 60 * 8 }, store: new (SQLiteStoreFactory(session))({ db: 'sessions.sqlite', dir: runtimeDir }) }))
 const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 8, standardHeaders: true, legacyHeaders: false })
 const requireAdmin = (req, res, next) => req.session.isAdmin ? next() : res.status(401).json({ error: 'Administrator authentication required.' })
 
@@ -157,4 +159,6 @@ app.get('/api/passports/:id', async (req, res) => {
   res.json({ passportId: row.passport_id, playerName: row.player_name, minecraftUsername: row.minecraft_username, minecraftUuid: row.minecraft_uuid, discordUsername: row.discord_username, server: 'YUGAM SMP', mode: row.server_mode, issueDate: row.approval_at, status: 'VERIFIED', photoUrl: row.photo_path ? `/uploads/${path.basename(row.photo_path)}` : null, verificationUrl: row.verification_url, qrCode })
 })
 app.use((_, res) => res.sendFile(path.join(root, 'public', 'index.html')))
-app.listen(port, () => console.log(`YUGAM SMP registry running at ${appOrigin}`))
+if (!isVercel) app.listen(port, () => console.log(`YUGAM SMP registry running at ${appOrigin}`))
+
+export default app
