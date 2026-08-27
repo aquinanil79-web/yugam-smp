@@ -1,12 +1,13 @@
 # YUGAM SMP Player Passport
 
-Full-stack player passport registry with Express, SQLite, server-side sessions, constrained image uploads, review workflow, QR-ready public verification, and SMTP-backed notifications.
+Full-stack player passport registry with Next.js, PostgreSQL, Vercel Blob image storage, server-side sessions, review workflow, and QR-ready public verification.
 
 ## Setup
 
-1. Copy `.env.example` to `.env`.
-2. Set `ADMIN_EMAIL` and a bcrypt `ADMIN_PASSWORD_HASH` (the full admin email is never sent to the browser).
-3. Add SMTP values for real transactional email delivery.
-4. Run `npm install`, then `npm run dev`.
+1. Create a PostgreSQL database through Vercel Marketplace, Neon, or Supabase.
+2. Create a Vercel Blob store and copy its `BLOB_READ_WRITE_TOKEN`.
+3. Set `DATABASE_URL`, `BLOB_READ_WRITE_TOKEN`, `ADMIN_EMAIL`, and `APP_BASE_URL` in Vercel project settings.
+4. Run `npm install`, `npx prisma db push`, then `npm run dev` locally.
+5. Deploy with Vercel. The build command is `npm run build` and the output is handled by Next.js.
 
-The application creates `yugam.sqlite`, `sessions.sqlite`, and `uploads/` at runtime. Do not commit `.env`, the database files, or uploaded images.
+Do not use SQLite or local upload directories on Vercel. Vercel's filesystem is temporary; PostgreSQL stores application data and Vercel Blob stores photos.

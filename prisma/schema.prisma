@@ -1,0 +1,92 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Application {
+  id                Int       @id @default(autoincrement())
+  applicationId     String    @unique
+  playerName        String
+  minecraftUsername  String
+  discordUsername   String
+  discordId         String
+  serverMode        String
+  playerBio         String
+  photoKey          String
+  accessHash        String
+  status            Status    @default(PENDING)
+  adminMessage      String?
+  rejectionReason   String?
+  passportId        String?   @unique
+  passportNumber    String?   @unique
+  verificationUrl   String?
+  submittedAt       DateTime  @default(now())
+  reviewedAt        DateTime?
+  approvedAt        DateTime?
+  updatedAt         DateTime  @updatedAt
+  history           ReviewHistory[]
+  passport          Passport?
+  playerSessions    PlayerSession[]
+  @@index([minecraftUsername])
+  @@index([status])
+  @@index([submittedAt])
+}
+
+model AdminSession {
+  id        Int      @id @default(autoincrement())
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model PlayerSession {
+  id        Int      @id @default(autoincrement())
+  tokenHash String   @unique
+  applicationId Int
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+}
+
+model ReviewHistory {
+  id            Int      @id @default(autoincrement())
+  applicationId Int
+  action        String
+  previousStatus Status?
+  newStatus     Status?
+  actor         String
+  message       String?
+  createdAt     DateTime @default(now())
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  @@index([applicationId])
+}
+
+model Passport {
+  id              Int      @id @default(autoincrement())
+  passportId      String   @unique
+  applicationId   Int      @unique
+  passportNumber  String   @unique
+  issueDate       DateTime @default(now())
+  status          PassportStatus @default(VALID)
+  verificationId  String   @unique
+  revokedAt       DateTime?
+  revocationReason String?
+  application     Application @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+}
+
+enum Status {
+  PENDING
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  NEEDS_CHANGES
+}
+
+enum PassportStatus {
+  VALID
+  REVOKED
+}
