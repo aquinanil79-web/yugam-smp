@@ -11,7 +11,6 @@ import path from 'node:path'
 import fs from 'node:fs'
 import crypto from 'node:crypto'
 import QRCode from 'qrcode'
-import nodemailer from 'nodemailer'
 import { z } from 'zod'
 
 const root = process.cwd()
@@ -28,7 +27,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS applications (
     id INTEGER PRIMARY KEY AUTOINCREMENT, application_id TEXT UNIQUE NOT NULL, player_name TEXT NOT NULL,
     minecraft_username TEXT NOT NULL, minecraft_uuid TEXT NOT NULL, discord_username TEXT NOT NULL,
-    discord_id TEXT NOT NULL, server_mode TEXT NOT NULL, player_bio TEXT NOT NULL, email TEXT NOT NULL,
+    discord_id TEXT NOT NULL, server_mode TEXT NOT NULL, player_bio TEXT NOT NULL, email TEXT,
     photo_path TEXT, status TEXT NOT NULL DEFAULT 'PENDING', admin_message TEXT, rejection_reason TEXT,
     passport_id TEXT UNIQUE, verification_url TEXT, submitted_at TEXT NOT NULL, reviewed_at TEXT,
     approval_at TEXT, access_token TEXT UNIQUE, updated_at TEXT NOT NULL
@@ -48,9 +47,9 @@ db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_access_token ON applications(acce
 const now = () => new Date().toISOString()
 const nextId = (prefix, count) => `${prefix}-${String(count).padStart(6, '0')}`
 const publicApplication = row => ({ applicationId: row.application_id, minecraftUsername: row.minecraft_username, submissionDate: row.submitted_at, status: row.status, lastUpdated: row.updated_at, adminMessage: row.admin_message || row.rejection_reason || null })
-const adminApplication = row => ({ ...publicApplication(row), playerName: row.player_name, minecraftUuid: row.minecraft_uuid, discordUsername: row.discord_username, discordId: row.discord_id, serverMode: row.server_mode, playerBio: row.player_bio, email: row.email, photoUrl: row.photo_path ? `/uploads/${path.basename(row.photo_path)}` : null, passportId: row.passport_id, history: db.prepare('SELECT action, message, created_at AS createdAt FROM review_history WHERE application_id = ? ORDER BY created_at DESC').all(row.application_id) })
+const adminApplication = row => ({ ...publicApplication(row), playerName: row.player_name, minecraftUuid: row.minecraft_uuid, discordUsername: row.discord_username, discordId: row.discord_id, serverMode: row.server_mode, playerBio: row.player_bio, photoUrl: row.photo_path ? `/uploads/${path.basename(row.photo_path)}` : null, passportId: row.passport_id, history: db.prepare('SELECT action, message, created_at AS createdAt FROM review_history WHERE application_id = ? ORDER BY created_at DESC').all(row.application_id) })
 
-const schema = z.object({ playerName: z.string().trim().min(2).max(80), minecraftUsername: z.string().trim().min(3).max(40), minecraftUuid: z.string().trim().max(60).optional(), discordUsername: z.string().trim().min(2).max(50), discordId: z.string().trim().min(2).max(30), serverMode: z.enum(['Survival', 'Anarchy']), playerBio: z.string().trim().min(12).max(600), email: z.string().trim().email().max(160) })
+const schema = z.object({ playerName: z.string().trim().min(2).max(80), minecraftUsername: z.string().trim().min(3).max(40), minecraftUuid: z.string().trim().max(60).optional(), discordUsername: z.string().trim().min(2).max(50), discordId: z.string().trim().min(2).max(30), serverMode: z.enum(['Survival', 'Anarchy']), playerBio: z.string().trim().min(12).max(600), })
 const upload = multer({ storage: multer.diskStorage({ destination: uploadsDir, filename: (_, file, cb) => cb(null, `${crypto.randomUUID()}${path.extname(file.originalname).toLowerCase()}`) }), limits: { fileSize: 4 * 1024 * 1024 }, fileFilter: (_, file, cb) => cb(null, ['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) })
 
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }))
@@ -62,12 +61,6 @@ app.use(session({ secret: process.env.SESSION_SECRET || 'development-only-change
 const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 8, standardHeaders: true, legacyHeaders: false })
 const requireAdmin = (req, res, next) => req.session.isAdmin ? next() : res.status(401).json({ error: 'Administrator authentication required.' })
 
-async function sendMail(to, subject, text) {
-  if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) return { delivered: false, reason: 'SMTP is not configured.' }
-  const transporter = nodemailer.createTransport({ host: process.env.SMTP_HOST, port: Number(process.env.SMTP_PORT || 587), secure: process.env.SMTP_SECURE === 'true', auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } })
-  await transporter.sendMail({ from: `"${process.env.MAIL_FROM_NAME || 'YUGAM SMP Registry'}" <${process.env.MAIL_FROM_EMAIL || process.env.SMTP_USER}>`, to, subject, text })
-  return { delivered: true }
-}
 const log = (action, applicationId) => db.prepare('INSERT INTO audit_logs (action, application_id, created_at) VALUES (?, ?, ?)').run(action, applicationId, now())
 
 app.post('/api/applications', upload.single('photo'), async (req, res) => {
@@ -80,18 +73,17 @@ app.post('/api/applications', upload.single('photo'), async (req, res) => {
   const count = db.prepare('SELECT COUNT(*) AS count FROM applications').get().count + 1
   const applicationId = nextId('YUG-APP', count)
   const timestamp = now()
-  db.prepare(`INSERT INTO applications (application_id, player_name, minecraft_username, minecraft_uuid, discord_username, discord_id, server_mode, player_bio, email, photo_path, status, submitted_at, updated_at) VALUES (@applicationId, @playerName, @minecraftUsername, @minecraftUuid, @discordUsername, @discordId, @serverMode, @playerBio, @email, @photoPath, 'PENDING', @timestamp, @timestamp)`).run({ ...data, applicationId, photoPath: req.file?.path || null, timestamp })
+  db.prepare(`INSERT INTO applications (application_id, player_name, minecraft_username, minecraft_uuid, discord_username, discord_id, server_mode, player_bio, email, photo_path, status, submitted_at, updated_at) VALUES (@applicationId, @playerName, @minecraftUsername, @minecraftUuid, @discordUsername, @discordId, @serverMode, @playerBio, '', @photoPath, 'PENDING', @timestamp, @timestamp)`).run({ ...data, applicationId, photoPath: req.file?.path || null, timestamp })
   db.prepare('INSERT INTO review_history (application_id, action, created_at) VALUES (?, ?, ?)').run(applicationId, 'SUBMITTED', timestamp)
   log('Application submitted', applicationId)
-  await sendMail(data.email, 'YUGAM SMP Passport Application Received', `Hello ${data.playerName},\n\nYour YUGAM SMP passport application has been received.\nApplication ID: ${applicationId}\n\nTrack updates at ${appOrigin}/application/${applicationId}`).catch(() => {})
   res.status(201).json({ applicationId, status: 'PENDING' })
 })
 
 app.post('/api/status', (req, res) => {
-  const data = z.object({ applicationId: z.string().trim(), email: z.string().trim().email() }).safeParse(req.body)
-  if (!data.success) return res.status(400).json({ error: 'Enter a valid application ID and email address.' })
-  const row = db.prepare('SELECT * FROM applications WHERE application_id = ? AND lower(email) = lower(?)').get(data.data.applicationId, data.data.email)
-  if (!row) return res.status(404).json({ error: 'No application matches that ID and email.' })
+  const data = z.object({ applicationId: z.string().trim().min(1), discordId: z.string().trim().min(2).max(30) }).safeParse(req.body)
+  if (!data.success) return res.status(400).json({ error: 'Enter your application ID and Discord ID.' })
+  const row = db.prepare('SELECT * FROM applications WHERE application_id = ? AND discord_id = ?').get(data.data.applicationId, data.data.discordId)
+  if (!row) return res.status(404).json({ error: 'No application matches that ID and Discord ID.' })
   res.json(publicApplication(row))
 })
 
@@ -127,7 +119,7 @@ app.post('/api/admin/login', loginLimiter, async (req, res) => {
 app.post('/api/admin/logout', requireAdmin, (req, res) => req.session.destroy(() => res.json({ ok: true })))
 app.get('/api/admin/me', (req, res) => res.json({ authenticated: Boolean(req.session.isAdmin) }))
 app.get('/api/admin/applications', requireAdmin, (req, res) => {
-  const rows = db.prepare('SELECT application_id AS applicationId, player_name AS playerName, minecraft_username AS minecraftUsername, email, submitted_at AS submissionDate, status FROM applications ORDER BY submitted_at DESC').all()
+  const rows = db.prepare('SELECT application_id AS applicationId, player_name AS playerName, minecraft_username AS minecraftUsername, discord_id AS discordId, submitted_at AS submissionDate, status FROM applications ORDER BY submitted_at DESC').all()
   res.json(rows)
 })
 app.get('/api/admin/applications/:id', requireAdmin, (req, res) => { const row = db.prepare('SELECT * FROM applications WHERE application_id = ?').get(req.params.id); row ? res.json(adminApplication(row)) : res.status(404).json({ error: 'Application not found.' }) })
@@ -143,8 +135,6 @@ app.post('/api/admin/applications/:id/review', requireAdmin, async (req, res) =>
   db.prepare('UPDATE applications SET status = ?, admin_message = ?, rejection_reason = ?, passport_id = ?, verification_url = ?, access_token = ?, reviewed_at = ?, approval_at = ?, updated_at = ? WHERE application_id = ?').run(action.data.status, action.data.status === 'REJECTED' || action.data.status === 'NEEDS CHANGES' ? action.data.message : null, action.data.status === 'REJECTED' ? action.data.message : null, passportId, verificationUrl, accessToken, timestamp, action.data.status === 'APPROVED' ? timestamp : row.approval_at, timestamp, req.params.id)
   db.prepare('INSERT INTO review_history (application_id, action, message, created_at) VALUES (?, ?, ?, ?)').run(req.params.id, action.data.status, action.data.message || null, timestamp)
   log(`Application ${action.data.status.toLowerCase()}`, req.params.id)
-  const subject = action.data.status === 'APPROVED' ? 'Your YUGAM SMP Player Passport Has Been Approved' : 'YUGAM SMP Passport Application Update'
-  await sendMail(row.email, subject, `Hello ${row.player_name},\n\nYour application ${req.params.id} is now ${action.data.status}.\n${action.data.message || ''}\n${passportId ? `View your private passport: ${appOrigin}/passport/${passportId}?token=${accessToken}\nVerify passport: ${verificationUrl}` : `Check status: ${appOrigin}/application/${req.params.id}`}`).catch(() => {})
   res.json({ ok: true, passportId })
 })
 app.get('/api/verify/:id', (req, res) => {
