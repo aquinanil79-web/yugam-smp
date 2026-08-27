@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "scripts": {"dev": "node --watch server.js", "start": "node server.js"},
+  "scripts": {"dev": "node server.js", "start": "node server.js"},
   "dependencies": {
     "bcryptjs": "^3.0.2",
     "better-sqlite3": "^12.4.1",
